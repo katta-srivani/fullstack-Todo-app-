@@ -143,6 +143,7 @@ button:hover {
 }
 
 .status,
+.notice,
 .error {
   margin: 18px 0 0;
   border-radius: 8px;
@@ -152,6 +153,11 @@ button:hover {
 .status {
   background: #e0f2fe;
   color: #075985;
+}
+
+.notice {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .error {
