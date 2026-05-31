@@ -4,9 +4,17 @@ const todoSchema= new mongoose.Schema({
 
     text: {
         type: String,
-        require: true
+        required: true,
+        trim: true
     },
-    
+    dueDate: {
+        type: Date,
+        default: null
+    },
+    completed: {
+        type: Boolean,
+        default: false
+    },
 
-})
+}, { timestamps: true })
 module.exports=mongoose.model("ToDo",todoSchema)

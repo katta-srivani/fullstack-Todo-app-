@@ -4,6 +4,7 @@ import "./styles.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://localhost:5000" : "");
 const STORAGE_KEY = "fullstack-todo-app.todos";
+const emptyTodoForm = { text: "", dueDate: "" };
 
 const apiPath = (path) => `${API_BASE_URL}${path}`;
 const usesLegacyBackend = Boolean(API_BASE_URL);
@@ -39,6 +40,35 @@ function writeStoredTodos(todos) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
 }
 
+function normalizeTodo(todo) {
+  return {
+    ...todo,
+    _id: todo._id || createLocalId(),
+    createdAt: todo.createdAt || new Date().toISOString(),
+    dueDate: todo.dueDate || "",
+    completed: Boolean(todo.completed),
+  };
+}
+
+function formatDate(value) {
+  if (!value) return "No due date";
+  return new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value));
+}
+
+function getDueStatus(todo) {
+  if (!todo.dueDate) return { label: "No due date", className: "neutral" };
+  if (todo.completed) return { label: "Completed", className: "done" };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(todo.dueDate);
+  due.setHours(0, 0, 0, 0);
+
+  if (due < today) return { label: "Overdue", className: "danger" };
+  if (due.getTime() === today.getTime()) return { label: "Due today", className: "warning" };
+  return { label: "Upcoming", className: "good" };
+}
+
 async function requestJson(path, options = {}) {
   const response = await fetch(apiPath(path), options);
   if (!response.ok) {
@@ -50,16 +80,17 @@ async function requestJson(path, options = {}) {
 
 function App() {
   const [todos, setTodos] = React.useState([]);
-  const [text, setText] = React.useState("");
+  const [form, setForm] = React.useState(emptyTodoForm);
   const [editingId, setEditingId] = React.useState(null);
-  const [editingText, setEditingText] = React.useState("");
+  const [editingForm, setEditingForm] = React.useState(emptyTodoForm);
   const [loading, setLoading] = React.useState(true);
   const [notice, setNotice] = React.useState("");
   const [usingLocalStorage, setUsingLocalStorage] = React.useState(false);
 
   const saveLocalTodos = React.useCallback((nextTodos) => {
-    setTodos(nextTodos);
-    writeStoredTodos(nextTodos);
+    const normalizedTodos = nextTodos.map(normalizeTodo);
+    setTodos(normalizedTodos);
+    writeStoredTodos(normalizedTodos);
     setUsingLocalStorage(true);
     setNotice("Using browser storage because the database API is unavailable.");
   }, []);
@@ -68,7 +99,7 @@ function App() {
     try {
       setNotice("");
       const data = await requestJson(routes.list);
-      setTodos(data);
+      setTodos(data.map(normalizeTodo));
       setUsingLocalStorage(false);
     } catch {
       saveLocalTodos(readStoredTodos());
@@ -83,55 +114,85 @@ function App() {
 
   const addTodo = async (event) => {
     event.preventDefault();
-    const trimmed = text.trim();
+    const trimmed = form.text.trim();
     if (!trimmed) return;
+    const payload = { text: trimmed, dueDate: form.dueDate || null };
 
     try {
       setNotice("");
       const createdTodo = await requestJson(routes.create, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: trimmed }),
+        body: JSON.stringify(payload),
       });
-      setText("");
-      setTodos((current) => [createdTodo, ...current]);
+      setForm(emptyTodoForm);
+      setTodos((current) => [normalizeTodo(createdTodo), ...current]);
       setUsingLocalStorage(false);
     } catch {
-      const nextTodos = [{ _id: createLocalId(), text: trimmed }, ...readStoredTodos()];
-      setText("");
+      const nextTodos = [normalizeTodo({ ...payload, _id: createLocalId() }), ...readStoredTodos()];
+      setForm(emptyTodoForm);
       saveLocalTodos(nextTodos);
     }
   };
 
   const startEdit = (todo) => {
     setEditingId(todo._id);
-    setEditingText(todo.text);
+    setEditingForm({ text: todo.text, dueDate: todo.dueDate ? todo.dueDate.slice(0, 10) : "" });
   };
 
   const updateTodo = async (event) => {
     event.preventDefault();
-    const trimmed = editingText.trim();
+    const trimmed = editingForm.text.trim();
     if (!trimmed || !editingId) return;
+    const currentTodo = todos.find((todo) => todo._id === editingId);
+    const payload = {
+      _id: editingId,
+      text: trimmed,
+      dueDate: editingForm.dueDate || null,
+      completed: Boolean(currentTodo?.completed),
+    };
 
     try {
       setNotice("");
       const updatedTodo = await requestJson(routes.update, {
         method: usesLegacyBackend ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ _id: editingId, text: trimmed }),
+        body: JSON.stringify(payload),
       });
       setTodos((current) =>
-        current.map((todo) => (todo._id === editingId ? updatedTodo || { ...todo, text: trimmed } : todo))
+        current.map((todo) => (todo._id === editingId ? normalizeTodo(updatedTodo || { ...todo, ...payload }) : todo))
       );
       setUsingLocalStorage(false);
     } catch {
       const nextTodos = readStoredTodos().map((todo) =>
-        todo._id === editingId ? { ...todo, text: trimmed } : todo
+        todo._id === editingId ? normalizeTodo({ ...todo, ...payload }) : todo
       );
       saveLocalTodos(nextTodos);
     } finally {
       setEditingId(null);
-      setEditingText("");
+      setEditingForm(emptyTodoForm);
+    }
+  };
+
+  const toggleComplete = async (todo) => {
+    const payload = { _id: todo._id, text: todo.text, dueDate: todo.dueDate || null, completed: !todo.completed };
+
+    try {
+      setNotice("");
+      const updatedTodo = await requestJson(routes.update, {
+        method: usesLegacyBackend ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      setTodos((current) =>
+        current.map((currentTodo) => (currentTodo._id === todo._id ? normalizeTodo(updatedTodo || payload) : currentTodo))
+      );
+      setUsingLocalStorage(false);
+    } catch {
+      const nextTodos = readStoredTodos().map((currentTodo) =>
+        currentTodo._id === todo._id ? normalizeTodo({ ...currentTodo, ...payload }) : currentTodo
+      );
+      saveLocalTodos(nextTodos);
     }
   };
 
@@ -162,10 +223,16 @@ function App() {
         <form className="todo-form" onSubmit={addTodo}>
           <input
             type="text"
-            value={text}
-            onChange={(event) => setText(event.target.value)}
+            value={form.text}
+            onChange={(event) => setForm((current) => ({ ...current, text: event.target.value }))}
             placeholder="Add a new todo"
             aria-label="Todo text"
+          />
+          <input
+            type="date"
+            value={form.dueDate}
+            onChange={(event) => setForm((current) => ({ ...current, dueDate: event.target.value }))}
+            aria-label="Due date"
           />
           <button type="submit">Add</button>
         </form>
@@ -179,23 +246,47 @@ function App() {
             <p className="status">No todos yet. Add your first one.</p>
           ) : (
             todos.map((todo) => (
-              <article className="todo-item" key={todo._id}>
+              <article className={`todo-item ${todo.completed ? "is-complete" : ""}`} key={todo._id}>
                 {editingId === todo._id ? (
                   <form className="edit-form" onSubmit={updateTodo}>
                     <input
                       type="text"
-                      value={editingText}
-                      onChange={(event) => setEditingText(event.target.value)}
+                      value={editingForm.text}
+                      onChange={(event) => setEditingForm((current) => ({ ...current, text: event.target.value }))}
                       aria-label="Edit todo text"
                     />
+                    <input
+                      type="date"
+                      value={editingForm.dueDate}
+                      onChange={(event) => setEditingForm((current) => ({ ...current, dueDate: event.target.value }))}
+                      aria-label="Edit due date"
+                    />
                     <button type="submit">Save</button>
-                    <button type="button" onClick={() => setEditingId(null)}>
+                    <button type="button" onClick={() => {
+                      setEditingId(null);
+                      setEditingForm(emptyTodoForm);
+                    }}>
                       Cancel
                     </button>
                   </form>
                 ) : (
                   <>
-                    <span>{todo.text}</span>
+                    <div className="todo-content">
+                      <label className="todo-check">
+                        <input
+                          type="checkbox"
+                          checked={todo.completed}
+                          onChange={() => toggleComplete(todo)}
+                          aria-label={`Mark ${todo.text} as ${todo.completed ? "active" : "complete"}`}
+                        />
+                        <span>{todo.text}</span>
+                      </label>
+                      <div className="todo-meta">
+                        <span>Created {formatDate(todo.createdAt)}</span>
+                        <span>Due {formatDate(todo.dueDate)}</span>
+                        <strong className={getDueStatus(todo).className}>{getDueStatus(todo).label}</strong>
+                      </div>
+                    </div>
                     <div className="actions">
                       <button type="button" onClick={() => startEdit(todo)}>
                         Edit

@@ -9,6 +9,14 @@ const todoSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    dueDate: {
+      type: Date,
+      default: null,
+    },
+    completed: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
@@ -52,7 +60,7 @@ export default async function handler(req, res) {
       const text = req.body?.text?.trim();
       if (!text) return sendError(res, new Error("Todo text is required"), 400);
 
-      const todo = await Todo.create({ text });
+      const todo = await Todo.create({ text, dueDate: req.body?.dueDate || null });
       return res.status(201).json(todo);
     }
 
@@ -60,8 +68,20 @@ export default async function handler(req, res) {
       const { _id } = req.body || {};
       const text = req.body?.text?.trim();
       if (!_id || !text) return sendError(res, new Error("Todo id and text are required"), 400);
+      const updates = {
+        text,
+        dueDate: req.body?.dueDate || null,
+      };
 
-      const todo = await Todo.findByIdAndUpdate(_id, { text }, { new: true, runValidators: true });
+      if (typeof req.body?.completed === "boolean") {
+        updates.completed = req.body.completed;
+      }
+
+      const todo = await Todo.findByIdAndUpdate(
+        _id,
+        updates,
+        { new: true, runValidators: true }
+      );
       if (!todo) return sendError(res, new Error("Todo not found"), 404);
 
       return res.status(200).json(todo);

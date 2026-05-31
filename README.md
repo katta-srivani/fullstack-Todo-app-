@@ -14,6 +14,10 @@ A MERN stack Todo application with a React frontend, Express/Node backend, and M
 - View saved todos from MongoDB
 - Edit existing todos
 - Delete todos
+- Track created dates automatically
+- Add and edit due dates
+- Mark todos as complete
+- See overdue, due today, upcoming, and completed status labels
 - Responsive UI
 - Production-safe API calls that do not point to localhost
 - Browser-storage fallback when the database API is unavailable

@@ -39,7 +39,7 @@ button {
 }
 
 .todo-panel {
-  width: min(720px, 100%);
+  width: min(860px, 100%);
   border: 1px solid rgba(23, 32, 51, 0.12);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.82);
@@ -69,7 +69,8 @@ button {
 
 .todo-form,
 .edit-form {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px auto;
   gap: 10px;
 }
 
@@ -112,7 +113,7 @@ button:hover {
 
 .todo-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -121,10 +122,78 @@ button:hover {
   padding: 14px;
 }
 
-.todo-item span {
+.todo-content {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.todo-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.todo-check input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: #0f766e;
+}
+
+.todo-check span {
   overflow-wrap: anywhere;
   color: #1f2937;
   font-weight: 700;
+}
+
+.todo-item.is-complete .todo-check span {
+  color: #64748b;
+  text-decoration: line-through;
+}
+
+.todo-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-left: 28px;
+}
+
+.todo-meta span,
+.todo-meta strong {
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 7px 10px;
+}
+
+.todo-meta .good {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.todo-meta .warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.todo-meta .danger {
+  background: #ffe4e6;
+  color: #9f1239;
+}
+
+.todo-meta .done {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.todo-meta .neutral {
+  background: #e2e8f0;
+  color: #475569;
 }
 
 .actions {
@@ -171,10 +240,17 @@ button:hover {
   }
 
   .todo-form,
-  .edit-form,
+  .edit-form {
+    grid-template-columns: 1fr;
+  }
+
   .todo-item {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .todo-meta {
+    padding-left: 0;
   }
 
   .actions {
