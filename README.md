@@ -16,6 +16,7 @@ A MERN stack Todo application with a React frontend, Express/Node backend, and M
 - Delete todos
 - Track created dates automatically
 - Add and edit due dates
+- Organize todos into Todo, In Progress, and Completed sections
 - Mark todos as complete
 - See overdue, due today, upcoming, and completed status labels
 - Responsive UI

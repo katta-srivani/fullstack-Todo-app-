@@ -12,10 +12,11 @@ module.exports.getToDo = async (req, res) => {
 
 module.exports.saveToDo=async(req,res) =>{
 
-    const { text, dueDate } =req.body;
+    const { text, dueDate, status } =req.body;
+    const nextStatus = status || "todo"
 
     ToDoModel
-    .create({ text, dueDate: dueDate || null })
+    .create({ text, dueDate: dueDate || null, status: nextStatus, completed: nextStatus === "completed" })
     .then((data) => {
         console.log("Added successfully");
         console.log(data);
@@ -25,10 +26,16 @@ module.exports.saveToDo=async(req,res) =>{
 
 }
 module.exports.updateToDo=async(req,res) =>{
-    const{_id ,text, dueDate, completed}=req.body
+    const{_id ,text, dueDate, completed, status}=req.body
     const updates = { text, dueDate: dueDate || null }
+    if (status) {
+        updates.status = status
+        updates.completed = status === "completed"
+    }
+
     if (typeof completed === "boolean") {
         updates.completed = completed
+        updates.status = completed ? "completed" : updates.status || "todo"
     }
 
     ToDoModel

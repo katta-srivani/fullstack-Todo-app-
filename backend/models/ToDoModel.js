@@ -15,6 +15,11 @@ const todoSchema= new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    status: {
+        type: String,
+        enum: ["todo", "in-progress", "completed"],
+        default: "todo"
+    },
 
 }, { timestamps: true })
 module.exports=mongoose.model("ToDo",todoSchema)

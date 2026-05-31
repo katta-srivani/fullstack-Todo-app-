@@ -5,6 +5,11 @@ import "./styles.css";
 const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://localhost:5000" : "");
 const STORAGE_KEY = "fullstack-todo-app.todos";
 const emptyTodoForm = { text: "", dueDate: "" };
+const statusColumns = [
+  { key: "todo", title: "Todo" },
+  { key: "in-progress", title: "In Progress" },
+  { key: "completed", title: "Completed" },
+];
 
 const apiPath = (path) => `${API_BASE_URL}${path}`;
 const usesLegacyBackend = Boolean(API_BASE_URL);
@@ -41,12 +46,15 @@ function writeStoredTodos(todos) {
 }
 
 function normalizeTodo(todo) {
+  const status = todo.status || (todo.completed ? "completed" : "todo");
+
   return {
     ...todo,
     _id: todo._id || createLocalId(),
     createdAt: todo.createdAt || new Date().toISOString(),
     dueDate: todo.dueDate || "",
-    completed: Boolean(todo.completed),
+    status,
+    completed: status === "completed" || Boolean(todo.completed),
   };
 }
 
@@ -57,7 +65,7 @@ function formatDate(value) {
 
 function getDueStatus(todo) {
   if (!todo.dueDate) return { label: "No due date", className: "neutral" };
-  if (todo.completed) return { label: "Completed", className: "done" };
+  if (todo.status === "completed") return { label: "Completed", className: "done" };
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -116,7 +124,7 @@ function App() {
     event.preventDefault();
     const trimmed = form.text.trim();
     if (!trimmed) return;
-    const payload = { text: trimmed, dueDate: form.dueDate || null };
+    const payload = { text: trimmed, dueDate: form.dueDate || null, status: "todo", completed: false };
 
     try {
       setNotice("");
@@ -149,6 +157,7 @@ function App() {
       _id: editingId,
       text: trimmed,
       dueDate: editingForm.dueDate || null,
+      status: currentTodo?.status || "todo",
       completed: Boolean(currentTodo?.completed),
     };
 
@@ -174,8 +183,14 @@ function App() {
     }
   };
 
-  const toggleComplete = async (todo) => {
-    const payload = { _id: todo._id, text: todo.text, dueDate: todo.dueDate || null, completed: !todo.completed };
+  const updateTodoStatus = async (todo, status) => {
+    const payload = {
+      _id: todo._id,
+      text: todo.text,
+      dueDate: todo.dueDate || null,
+      status,
+      completed: status === "completed",
+    };
 
     try {
       setNotice("");
@@ -195,6 +210,15 @@ function App() {
       saveLocalTodos(nextTodos);
     }
   };
+
+  const toggleComplete = (todo) => {
+    updateTodoStatus(todo, todo.status === "completed" ? "todo" : "completed");
+  };
+
+  const groupedTodos = statusColumns.map((column) => ({
+    ...column,
+    todos: todos.filter((todo) => todo.status === column.key),
+  }));
 
   const deleteTodo = async (_id) => {
     try {
@@ -239,13 +263,24 @@ function App() {
 
         {notice && <p className={usingLocalStorage ? "notice" : "status"}>{notice}</p>}
 
-        <div className="todo-list">
-          {loading ? (
-            <p className="status">Loading todos...</p>
-          ) : todos.length === 0 ? (
-            <p className="status">No todos yet. Add your first one.</p>
-          ) : (
-            todos.map((todo) => (
+        {loading ? (
+          <p className="status">Loading todos...</p>
+        ) : todos.length === 0 ? (
+          <p className="status">No todos yet. Add your first one.</p>
+        ) : (
+          <div className="todo-board">
+            {groupedTodos.map((column) => (
+              <section className="todo-column" key={column.key}>
+                <div className="column-heading">
+                  <h2>{column.title}</h2>
+                  <span>{column.todos.length}</span>
+                </div>
+
+                <div className="todo-list">
+                  {column.todos.length === 0 ? (
+                    <p className="empty-column">No tasks here.</p>
+                  ) : (
+                    column.todos.map((todo) => (
               <article className={`todo-item ${todo.completed ? "is-complete" : ""}`} key={todo._id}>
                 {editingId === todo._id ? (
                   <form className="edit-form" onSubmit={updateTodo}>
@@ -288,6 +323,18 @@ function App() {
                       </div>
                     </div>
                     <div className="actions">
+                      {statusColumns
+                        .filter((status) => status.key !== todo.status)
+                        .map((status) => (
+                          <button
+                            type="button"
+                            className="status-action"
+                            key={status.key}
+                            onClick={() => updateTodoStatus(todo, status.key)}
+                          >
+                            {status.title}
+                          </button>
+                        ))}
                       <button type="button" onClick={() => startEdit(todo)}>
                         Edit
                       </button>
@@ -298,9 +345,13 @@ function App() {
                   </>
                 )}
               </article>
-            ))
-          )}
-        </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );
