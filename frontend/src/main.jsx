@@ -2,7 +2,51 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://localhost:5000" : "");
+const STORAGE_KEY = "fullstack-todo-app.todos";
+
+const apiPath = (path) => `${API_BASE_URL}${path}`;
+const usesLegacyBackend = Boolean(API_BASE_URL);
+
+const routes = usesLegacyBackend
+  ? {
+      list: "/get",
+      create: "/save",
+      update: "/update",
+      delete: "/delete",
+    }
+  : {
+      list: "/api/todos",
+      create: "/api/todos",
+      update: "/api/todos",
+      delete: "/api/todos",
+    };
+
+function createLocalId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function readStoredTodos() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredTodos(todos) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+}
+
+async function requestJson(path, options = {}) {
+  const response = await fetch(apiPath(path), options);
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "Request failed");
+  }
+  return response.status === 204 ? null : response.json();
+}
 
 function App() {
   const [todos, setTodos] = React.useState([]);
@@ -10,21 +54,28 @@ function App() {
   const [editingId, setEditingId] = React.useState(null);
   const [editingText, setEditingText] = React.useState("");
   const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState("");
+  const [notice, setNotice] = React.useState("");
+  const [usingLocalStorage, setUsingLocalStorage] = React.useState(false);
+
+  const saveLocalTodos = React.useCallback((nextTodos) => {
+    setTodos(nextTodos);
+    writeStoredTodos(nextTodos);
+    setUsingLocalStorage(true);
+    setNotice("Using browser storage because the database API is unavailable.");
+  }, []);
 
   const fetchTodos = React.useCallback(async () => {
     try {
-      setError("");
-      const response = await fetch(`${API_URL}/get`);
-      if (!response.ok) throw new Error("Unable to load todos");
-      const data = await response.json();
+      setNotice("");
+      const data = await requestJson(routes.list);
       setTodos(data);
-    } catch (err) {
-      setError(err.message);
+      setUsingLocalStorage(false);
+    } catch {
+      saveLocalTodos(readStoredTodos());
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [saveLocalTodos]);
 
   React.useEffect(() => {
     fetchTodos();
@@ -36,17 +87,19 @@ function App() {
     if (!trimmed) return;
 
     try {
-      setError("");
-      const response = await fetch(`${API_URL}/save`, {
+      setNotice("");
+      const createdTodo = await requestJson(routes.create, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: trimmed }),
       });
-      if (!response.ok) throw new Error("Unable to add todo");
       setText("");
-      fetchTodos();
-    } catch (err) {
-      setError(err.message);
+      setTodos((current) => [createdTodo, ...current]);
+      setUsingLocalStorage(false);
+    } catch {
+      const nextTodos = [{ _id: createLocalId(), text: trimmed }, ...readStoredTodos()];
+      setText("");
+      saveLocalTodos(nextTodos);
     }
   };
 
@@ -61,33 +114,40 @@ function App() {
     if (!trimmed || !editingId) return;
 
     try {
-      setError("");
-      const response = await fetch(`${API_URL}/update`, {
-        method: "POST",
+      setNotice("");
+      const updatedTodo = await requestJson(routes.update, {
+        method: usesLegacyBackend ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ _id: editingId, text: trimmed }),
       });
-      if (!response.ok) throw new Error("Unable to update todo");
+      setTodos((current) =>
+        current.map((todo) => (todo._id === editingId ? updatedTodo || { ...todo, text: trimmed } : todo))
+      );
+      setUsingLocalStorage(false);
+    } catch {
+      const nextTodos = readStoredTodos().map((todo) =>
+        todo._id === editingId ? { ...todo, text: trimmed } : todo
+      );
+      saveLocalTodos(nextTodos);
+    } finally {
       setEditingId(null);
       setEditingText("");
-      fetchTodos();
-    } catch (err) {
-      setError(err.message);
     }
   };
 
   const deleteTodo = async (_id) => {
     try {
-      setError("");
-      const response = await fetch(`${API_URL}/delete`, {
-        method: "POST",
+      setNotice("");
+      await requestJson(routes.delete, {
+        method: usesLegacyBackend ? "POST" : "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ _id }),
       });
-      if (!response.ok) throw new Error("Unable to delete todo");
-      fetchTodos();
-    } catch (err) {
-      setError(err.message);
+      setTodos((current) => current.filter((todo) => todo._id !== _id));
+      setUsingLocalStorage(false);
+    } catch {
+      const nextTodos = readStoredTodos().filter((todo) => todo._id !== _id);
+      saveLocalTodos(nextTodos);
     }
   };
 
@@ -110,7 +170,7 @@ function App() {
           <button type="submit">Add</button>
         </form>
 
-        {error && <p className="error">{error}</p>}
+        {notice && <p className={usingLocalStorage ? "notice" : "status"}>{notice}</p>}
 
         <div className="todo-list">
           {loading ? (
